@@ -1,0 +1,17 @@
+# Direct dependencies. Lock with:
+#   uv pip compile requirements.in --universal -o requirements.lock
+duckdb
+pandas
+pyarrow
+numpy
+pyyaml
+datasetsforecast
+statsforecast
+mlforecast
+lightgbm
+ortools
+langgraph
+pydantic
+jinja2
+openpyxl
+pytest
