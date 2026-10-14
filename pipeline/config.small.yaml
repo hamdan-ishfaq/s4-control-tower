@@ -1,0 +1,5 @@
+# Quick runs and the Windows CI job: same pipeline, 50 SKUs.
+extends: config.yaml
+skus: 50
+snapshots: 7
+paths: {data_dir: data, db: data/s4ct_small.duckdb}

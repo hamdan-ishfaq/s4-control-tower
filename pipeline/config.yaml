@@ -1,0 +1,18 @@
+version: 1                   # bump when outputs change on purpose; the determinism gate checks it
+seed: 42
+today: 2026-10-14            # demo "today", fixed forever; M5 dates shift to end the day before
+skus: 500
+categories: [FOODS, HOUSEHOLD]
+plants: {P001: [CA_1, CA_2, CA_3, CA_4], P002: [TX_1, TX_2, TX_3, WI_1, WI_2, WI_3]}
+vendors: 25
+snapshots: 60
+service_targets: {A: 0.98, B: 0.95, C: 0.90}
+review_period_days: 7
+holding_rate_year: 0.25
+truck_pallets: 26
+freight_cost_per_truck_usd: 800
+case_packs: {FOODS: [12, 24, 48], HOUSEHOLD: [6, 12, 24]}
+max_critical_per_day: 40
+forecast: {horizon: 28, windows: 4, season_length: 7}
+llm: {model: "<pinned OpenRouter model id>", mode: cache-first, max_output_tokens: 1200}
+paths: {data_dir: data, db: data/s4ct.duckdb}
