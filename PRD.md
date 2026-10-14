@@ -153,7 +153,7 @@ The biggest risk is time: four weeks, part-time, beside a final year and a job. 
 | --- | --- | --- |
 | Scope creep | Launch slips past Nov 11 | Stretch only after MVP done; weekly cut review |
 | Simulation looks fake | SAP or SC people dismiss it | Publish ASSUMPTIONS.md; plausible lead times and fill rates; label "simulated" on every page |
-| Free LLM limits (50 requests/day on free OpenRouter models under 10 purchased credits) | Briefs not generated | One call per day covers brief + emails; cache results in the repo; a one-off $10 credit raises the cap to 1,000/day |
+| Free LLM limits (Groq free tier: 1,000 requests/day, 8,000 tokens/min per model) | Briefs not generated | One call per day covers brief + emails; cache results in the repo; pace calls under the token cap; template fallback ships without a key |
 | M5 data terms | Takedown request | Download M5 in CI; do not re-host the raw files; publish only simulated and aggregated outputs |
 | Broken or sleeping link | Recruiter sees nothing | Static hosting; CI link check; no server on the click path |
 | SAP fidelity questioned | Credibility | Standard table and field names; dictionary lists simplifications (one company code, no pricing conditions, no MRP run) |

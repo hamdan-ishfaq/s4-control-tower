@@ -18,7 +18,7 @@ The pipeline snakes through eight steps in CI; only the AI step calls out, once 
 
 ## Stack and cost
 
-Recurring cost is $0. The only optional spend is a one-off $10 OpenRouter credit, which raises the free-model cap from 50 to 1,000 requests a day ([OpenRouter limits](https://openrouter.ai/docs/api/reference/limits)).
+Recurring cost is $0, with no optional spend. The LLM runs on Groq's free tier, which allows 1,000 requests a day and 8,000 tokens a minute per model on this key (read from Groq's rate-limit headers on 2026-10-15).
 
 | Layer | Choice | Why | Cost |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@ Recurring cost is $0. The only optional spend is a one-off $10 OpenRouter credit
 | Forecasting | statsforecast (SeasonalNaive, AutoETS); optional mlforecast + LightGBM | Standard, fast on thousands of series | $0 |
 | Optimization | OR-Tools CP-SAT | Reused from HaulRank | $0 |
 | Agent | LangGraph + Pydantic | You know both | $0 |
-| LLM | OpenRouter: a `:free` model (20 req/min) or a small paid model | One call per day | $0–10 |
+| LLM | Groq free tier, OpenAI-compatible API with JSON mode (`openai/gpt-oss-120b`, provisional) | One call per day; fast; 1,000 req/day free | $0 |
 | Excel | openpyxl | Writes real formulas | $0 |
 | Web app | React + Vite + TypeScript, DuckDB-WASM, ECharts (imported selectively), Tailwind | Static, SQL in the browser | $0 |
 | Hosting | GitHub Pages (Vercel Hobby as backup) | Never sleeps | $0 |
@@ -267,7 +267,7 @@ The LLM gets a facts file and returns words; a deterministic verifier rejects an
 
 **Email style.** Polite, short and professional, not legalistic. Greet the vendor by LFA1-NAME1 ("Dear Harbor Ridge Supply team") and sign "Purchasing, Plant P001 (demo)", using the plant of the late lines.
 
-**LLM budget.** One call per snapshot day plus at most one retry: 60–120 calls for 60 days. The free OpenRouter tier allows 50 requests a day, so either split the first run over two days or add the one-off $10 credit. Responses are cached under `brief/cache/` keyed by a hash of prompt version, model ID and facts, and committed. CI then calls the LLM only when facts or prompts change, and with no API key it ships template briefs. Pin the model ID in config.yaml and record it in the eval file, because free models come and go. At M3, pin a current `:free` model that supports JSON output, with `openai/gpt-4o-mini` as the fallback. Default for the first run: split the 60–120 calls over two days instead of buying credit.
+**LLM budget.** One call per snapshot day plus at most one retry: 60–120 calls for 60 days. Groq's free tier allows 1,000 requests a day, so the whole first run fits in one day; the binding limit is 8,000 tokens a minute, so the graph waits between calls when the limit headers say so. Responses are cached under `brief/cache/` keyed by a hash of prompt version, model ID and facts, and committed. CI then calls the LLM only when facts or prompts change, and with no API key it ships template briefs. Pin the model ID in config.yaml and record it in the eval file, because free models come and go. Provisional pin: `openai/gpt-oss-120b` (JSON mode verified 2026-10-15); `qwen/qwen3.8-27b` is the fallback. Confirm the pin at M3 against Groq's model list.
 
 **Stretch S-01 (ask box).** A serverless function (Vercel Hobby or Cloudflare Workers free tier) holds the key and lets the model pick from a whitelist of parameterized queries. The browser runs the query in DuckDB-WASM, and the answer passes the same verifier. Never ship the key to the browser.
 
@@ -330,7 +330,7 @@ jobs:
         with: { path: data/m5, key: m5-v1 }
       - run: pip install -r requirements.lock
       - run: python tasks.py all
-        env: { OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_API_KEY }}", LLM_MODE: cache-first }
+        env: { GROQ_API_KEY: "${{ secrets.GROQ_API_KEY }}", LLM_MODE: cache-first }
       - run: pytest -q && python -m pipeline.gates
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
@@ -432,13 +432,13 @@ freight_cost_per_truck_usd: 800
 case_packs: {FOODS: [12, 24, 48], HOUSEHOLD: [6, 12, 24]}
 max_critical_per_day: 40
 forecast: {horizon: 28, windows: 4, season_length: 7}
-llm: {model: "<pinned OpenRouter model id>", mode: cache-first, max_output_tokens: 1200}
+llm: {provider: groq, base_url: "https://api.groq.com/openai/v1", model: openai/gpt-oss-120b, mode: cache-first, max_output_tokens: 1200}
 paths: {data_dir: data, db: data/s4ct.duckdb}
 ```
 
 | Variable | Needed | Notes |
 | --- | --- | --- |
-| `OPENROUTER_API_KEY` | Only to refresh briefs | GitHub Actions secret; never in `web/` or the bundle |
+| `GROQ_API_KEY` | Only to refresh briefs | Local `.env` (gitignored) and a GitHub Actions secret; never in `web/` or the bundle |
 | `LLM_MODE` | No | `cache-first` (default), `live`, or `template` |
 | `SEED` | No | Overrides config; changing it changes every hash |
 

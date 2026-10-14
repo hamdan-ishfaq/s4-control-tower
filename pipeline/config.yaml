@@ -14,5 +14,5 @@ freight_cost_per_truck_usd: 800
 case_packs: {FOODS: [12, 24, 48], HOUSEHOLD: [6, 12, 24]}
 max_critical_per_day: 40
 forecast: {horizon: 28, windows: 4, season_length: 7}
-llm: {model: "<pinned OpenRouter model id>", mode: cache-first, max_output_tokens: 1200}
+llm: {provider: groq, base_url: "https://api.groq.com/openai/v1", model: openai/gpt-oss-120b, mode: cache-first, max_output_tokens: 1200}
 paths: {data_dir: data, db: data/s4ct.duckdb}
