@@ -1,0 +1,26 @@
+# secrets
+.env
+.env.*
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# node / web build
+node_modules/
+web/dist/
+web/public/data/
+
+# data and build outputs (M5 is downloaded in CI, never re-hosted)
+data/
+*.duckdb
+*.duckdb.wal
+exports/
+
+# editors and OS
+.vscode/
+.idea/
+Thumbs.db
+~$*
