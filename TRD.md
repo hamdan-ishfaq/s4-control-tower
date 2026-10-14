@@ -38,7 +38,7 @@ Recurring cost is $0. The only optional spend is a one-off $10 OpenRouter credit
 | Video | OBS Studio or Loom free | Demo recording | $0 |
 | Uptime check | GitHub Actions weekly link check | No paid monitor | $0 |
 
-**Dev environment:** native Windows 11 with PowerShell, Python 3.12 and Node 24 LTS; no Docker and no WSL. Python 3.12 is pinned (not 3.14) because numba, behind statsforecast, and LightGBM are safest there; a `.python-version` file containing `3.12` makes uv pick it too. CI builds on Ubuntu and also runs a small Windows job, so both stay in step.
+**Dev environment:** native Windows 11 with PowerShell, Python 3.12 and Node 24 LTS; no Docker and no WSL. Python 3.12 is pinned (not 3.14) because the forecasting stack (statsforecast, LightGBM, and numba where a library pulls it in) is safest there; a `.python-version` file containing `3.12` makes uv pick it too. CI builds on Ubuntu and also runs a small Windows job, so both stay in step.
 
 ## Repository layout
 
@@ -47,8 +47,10 @@ One public repo with three top-level areas: the pipeline (Python), the web app (
 ```text
 s4-control-tower/
 ├── README.md · PRD.md · TRD.md · ASSUMPTIONS.md · CASE_STUDY.md
-├── tasks.py                      # python tasks.py all, or one stage: data, models, forecast, ...
+├── tasks.py                      # python tasks.py all, or one stage: ingest, simulate, data, models, forecast, ...
+├── pyproject.toml · requirements.in · requirements.lock · .python-version
 ├── pipeline/
+│   ├── config.py                 # loads config.yaml (config.small.yaml extends it); SEED override
 │   ├── config.yaml               # seed, plants, SKU count, service targets, horizons; config.small.yaml = 50 SKUs for quick runs
 │   ├── ingest_m5.py
 │   ├── simulate/                 # vendors, purchasing, sales, deliveries, billing, docflow
@@ -103,7 +105,7 @@ Derived tables: `stock_daily`, `demand_daily`, `forecast_daily`, `policy_params`
 **Simulation algorithm** (seeded, in this order):
 
 1. **SKUs.** Take the top 500 M5 items by unit sales over the last 365 days across FOODS and HOUSEHOLD combined (no fixed split; the resulting category mix goes in ASSUMPTIONS.md). MATNR = item ID, MATKL = department. Cost = 65–80% of the M5 sell price, fixed per SKU. Case pack (MARC-BSTRF, MARM CS) is drawn by seed: FOODS from {12, 24, 48}, HOUSEHOLD from {6, 12, 24}; cases per pallet go in MARM PAL. Every SKU exists in both plants with the same vendor.
-2. **Calendar.** Shift all dates by a multiple of 7 days so the last M5 sales day becomes the day before the demo's "today". Weekdays stay aligned, so weekly seasonality survives.
+2. **Calendar.** Shift all dates by a multiple of 7 days so the last M5 sales day becomes the day before the demo's "today". Weekdays stay aligned, so weekly seasonality survives. M5 ends on a Sunday (2016-06-19) and today − 1 is a Tuesday (2026-10-13), so the last 5 M5 days are dropped; the shift is +3,773 days. Each item-store series starts at its first sale (pre-launch zeros dropped).
 3. **Customers and plants.** The 10 M5 stores become customers C01–C10, named after their store ("Store CA-1" and so on). California stores buy from plant P001; Texas and Wisconsin stores buy from P002.
 4. **Vendors.** 25 vendors with fictional names built from seeded word lists (for example "Harbor Ridge Supply"; no real brands). Each department gets 2–4 vendors, and each SKU has one. Per vendor, draw planned lead time (5–21 days), actual lead-time spread (coefficient of variation 0.1–0.5), on-time probability, fill fraction and a minimum order value ($500–3,000, LFM1-MINBW). Three vendors degrade so both EXC-08 triggers fire: two slip gradually over the final 90 days, and one drops suddenly 30 days before today.
 5. **Sales orders** (last 365 days only). Each customer orders on two fixed weekdays. Line quantity = that store's M5 units for the SKU since its previous order. Requested date (VBEP-EDATU) = order date + 2 days.
@@ -123,8 +125,8 @@ Nine stages run in order through tasks.py, a small Python runner that behaves th
 
 | # | Stage | Command | Writes | Time budget |
 | --- | --- | --- | --- | --- |
-| 1 | Ingest M5 (cached between runs) | `python tasks.py data` | `demand_daily` | 2 min |
-| 2 | Simulate SAP layer | `python tasks.py data` | All SAP tables, `stock_daily` | 3 min |
+| 1 | Ingest M5 (download cached between runs) | `python tasks.py ingest` (or `data`) | `m5_calendar`, `m5_customers`, `sku_selection`, `demand_daily`, `ingest_meta` | 2 min |
+| 2 | Simulate SAP layer | `python tasks.py simulate` (or `data`) | All SAP tables, `stock_daily` | 3 min |
 | 3 | SQL models | `python tasks.py models` | Intermediate and mart views | 30 s |
 | 4 | Forecast and backtest | `python tasks.py forecast` | `forecast_daily`, eval/backtest.json | 5 min |
 | 5 | Policy and proposals | `python tasks.py policy` | `policy_params`, `po_proposals` | 2 min |
@@ -300,7 +302,7 @@ Filters, frozen header and data validation (cases 0 or more) are on. Derived col
 
 ## CI/CD and deploy
 
-One workflow builds, tests, gates and deploys on every push to main, with a small Windows job that keeps your setup working; a second runs a weekly smoke test against the live site.
+One workflow builds, tests, gates and deploys on every push to main, with a small Windows job that keeps your setup working; a second runs a weekly smoke test against the live site. The committed workflow grows with the pipeline: today it runs `tasks.py ingest` (full config on Ubuntu, small on Windows) and `pytest`; the Pages build and deploy jobs are added with the Overview page.
 
 ```yaml
 # .github/workflows/build.yml (sketch; pin the current major version of each action)
@@ -418,6 +420,7 @@ version: 1                   # bump when outputs change on purpose; the determin
 seed: 42
 today: 2026-10-14            # demo "today", fixed forever; M5 dates shift to end the day before
 skus: 500
+categories: [FOODS, HOUSEHOLD]
 plants: {P001: [CA_1, CA_2, CA_3, CA_4], P002: [TX_1, TX_2, TX_3, WI_1, WI_2, WI_3]}
 vendors: 25
 snapshots: 60
@@ -430,6 +433,7 @@ case_packs: {FOODS: [12, 24, 48], HOUSEHOLD: [6, 12, 24]}
 max_critical_per_day: 40
 forecast: {horizon: 28, windows: 4, season_length: 7}
 llm: {model: "<pinned OpenRouter model id>", mode: cache-first, max_output_tokens: 1200}
+paths: {data_dir: data, db: data/s4ct.duckdb}
 ```
 
 | Variable | Needed | Notes |
