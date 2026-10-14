@@ -16,3 +16,30 @@ max_critical_per_day: 40
 forecast: {horizon: 28, windows: 4, season_length: 7}
 llm: {provider: groq, base_url: "https://api.groq.com/openai/v1", model: openai/gpt-oss-120b, mode: cache-first, max_output_tokens: 1200}
 paths: {data_dir: data, db: data/s4ct.duckdb}
+
+# SAP-layer simulation (TRD, Simulation algorithm). Ranges are [low, high], drawn per entity by seed.
+simulation:
+  history_days: 365              # full documents cover the last 365 days before today
+  start_stock_days: 30           # opening stock = 30 days of average plant demand
+  cost_ratio: [0.65, 0.80]       # unit cost as a share of the M5 sell price, fixed per SKU
+  cases_per_pallet: [40, 60, 80] # MARM PAL
+  order_weekday_pairs: [[0, 3], [1, 4], [2, 5], [0, 4], [1, 5]]  # Mon=0; each customer gets one pair
+  requested_after_days: 2        # VBEP-EDATU = order date + 2
+  short_line_open_days: 3        # short lines get ABGRU after 3 days
+  delivery_block_rate: 0.08      # share of orders with VBAK-LIFSK (TRD said 2%; raised so EXC-06 fires 3+/week)
+  delivery_block_days: [1, 5]
+  billing_delay_rate: 0.06       # share of deliveries billed late (TRD said 1%; raised so EXC-07 fires 3+/week)
+  billing_delay_days: [3, 6]
+  vendor:
+    planned_lead_days: [5, 21]
+    lead_time_cv: [0.1, 0.5]
+    on_time_prob: [0.90, 0.99]   # P(first receipt <= EINDT + 1 day)
+    full_prob: [0.94, 0.995]     # P(line delivered in full on the first receipt)
+    short_fraction: [0.5, 0.95]  # share delivered when short
+    rest_later_prob: 0.5         # short lines: rest arrives later, else the line closes short (ELIKZ)
+    rest_delay_days: [3, 10]
+    min_order_value_usd: [500, 3000]
+    invoice_drift: [-0.03, 0.03] # vendor's mean invoice-vs-info-record price drift
+    invoice_days: [1, 5]
+    degrading: {gradual: 2, gradual_days: 90, gradual_end_on_time: 0.5, sudden: 1, sudden_days: 30, sudden_on_time: 0.4}
+  legacy_policy: {avg_days: 14, extra_cover_days: 7, factor: 1.2}

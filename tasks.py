@@ -22,7 +22,9 @@ def ingest(cfg: dict) -> None:
 
 
 def simulate(cfg: dict) -> None:
-    raise NotImplementedError("simulate: SAP-layer simulation is next in M1")
+    from pipeline import simulate as sim
+
+    sim.run(cfg)
 
 
 def data(cfg: dict) -> None:

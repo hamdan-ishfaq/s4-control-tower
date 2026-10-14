@@ -26,6 +26,24 @@ Top 500 M5 items by unit sales over the last 365 kept days (2015-06-16 to 2016-0
 
 The 10 M5 stores are customers C01–C10 ("Store CA-1" and so on). CA stores (C01–C04) buy from plant P001; TX and WI stores (C05–C10) buy from P002.
 
+## Vendors
+
+25 fictional vendors (names from seeded word lists). FOODS and HOUSEHOLD have only 5 M5 departments, so the TRD's "2–4 vendors per department" would allow at most 20; every department keeps at least 2 and the rest go where SKUs per vendor are highest: FOODS_1 2, FOODS_2 4, FOODS_3 11, HOUSEHOLD_1 6, HOUSEHOLD_2 2. Every SKU has one vendor, the same for both plants. Three vendors degrade on purpose (two gradually over the last 90 days, one suddenly 30 days before today), so the "vendor slipping" rule has something real to find. Per-vendor draws are in the `sim_vendor_params` table.
+
+## Simulation rates
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Orders per customer | 2 fixed weekdays a week; quantity = the store's M5 units since its previous order | Store replenishment from the DC |
+| Requested date | Order date + 2 days | |
+| Short lines | Rejected (ABGRU 02) 3 days after the requested date | |
+| Delivery blocks | 8% of orders, 1–5 days | The TRD's 2% gave about 0.3 blocked orders a week, too few for EXC-06 |
+| Late billing | 6% of deliveries, 3–6 extra days | The TRD's 1% gave about 0.5 a week, too few for EXC-07 |
+| Legacy purchasing | Weekly; order-up-to = 14-day average × (lead time + 7) × 1.2; no safety buffer | The deliberately weak baseline the new policy is judged against |
+| Opening stock | 30 days of average demand, 365 days before today | The first weeks are a ramp-up, outside the 60-day replay window |
+
+Seed 42 gives a line fill rate of 98.4% and 2.4% of SKU-plant-days ending at zero stock under the legacy policy.
+
 ## Planted cases
 
 None yet. Every exception case planted to make a rule fire is logged here (TRD, Exception coverage).

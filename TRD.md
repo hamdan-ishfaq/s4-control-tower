@@ -79,7 +79,7 @@ The pipeline writes standard S/4HANA table and field names into DuckDB, then add
 | T001W | Plants | WERKS, NAME1 |
 | MARA | Material master | MATNR, MTART (HAWA), MATKL, MEINS |
 | MARC | Material per plant | MATNR, WERKS, DISMM, MINBE, EISBE, PLIFZ, BSTRF |
-| MARM | Units of measure | MATNR, MEINH (CS, PAL), UMREZ, UMREN. CS = units per case; PAL = cases per pallet |
+| MARM | Units of measure | MATNR, MEINH (CS, PAL), UMREZ, UMREN. Both convert to EA as in SAP: CS UMREZ = units per case; PAL UMREZ = units per pallet, so cases per pallet = PAL UMREZ ÷ CS UMREZ |
 | MARD | Stock per storage location | MATNR, WERKS, LGORT, LABST |
 | MBEW | Valuation | MATNR, BWKEY, VPRSV, VERPR |
 | LFA1 | Vendor master | LIFNR, NAME1, LAND1 |
@@ -88,36 +88,36 @@ The pipeline writes standard S/4HANA table and field names into DuckDB, then add
 | EKKO | PO header | EBELN, BSART (NB), LIFNR, EKORG, BEDAT |
 | EKPO | PO item | EBELN, EBELP, MATNR, WERKS, MENGE, MEINS, NETPR, ELIKZ |
 | EKET | PO schedule line | EBELN, EBELP, ETENR, EINDT, MENGE, WEMNG |
-| EKBE | PO history | EBELN, EBELP, VGABE (1 goods receipt, 2 invoice), BWART, BUDAT, MENGE, DMBTR |
+| EKBE | PO history | EBELN, EBELP, VGABE (1 goods receipt, 2 invoice), GJAHR, BELNR (material document 49… or invoice 51…), BUZEI, BWART, BUDAT, MENGE, DMBTR |
 | MATDOC | Material documents | MBLNR, MJAHR, ZEILE, BWART (101, 122, 601), MATNR, WERKS, LGORT, MENGE, SHKZG, BUDAT, EBELN, EBELP, VBELN\_IM |
 | KNA1 | Customer master | KUNNR, NAME1, LAND1 |
 | VBAK | Sales order header | VBELN, AUART (OR), KUNNR, ERDAT, VKORG, LIFSK, FAKSK |
 | VBAP | Sales order item | VBELN, POSNR, MATNR, WERKS, KWMENG, NETWR, ABGRU |
 | VBEP | Sales schedule line | VBELN, POSNR, ETENR, EDATU, WMENG, BMENG |
-| LIKP / LIPS | Delivery header / item | VBELN, LFDAT, WADAT\_IST, KUNNR, LIFSK · POSNR, VGBEL, VGPOS, MATNR, LFIMG |
-| VBRK / VBRP | Billing header / item | VBELN, FKART, FKDAT, KUNRG, NETWR · POSNR, VGBEL, VGPOS, FKIMG |
-| VBFA | Document flow | VBELV, POSNV, VBELN, POSNN, VBTYP\_N (J delivery, M invoice) |
+| LIKP / LIPS | Delivery header / item | VBELN, LFDAT, WADAT\_IST, KUNNR, LIFSK · POSNR, VGBEL, VGPOS, MATNR, WERKS, LFIMG |
+| VBRK / VBRP | Billing header / item | VBELN, FKART (F2), FKDAT, KUNRG, NETWR · POSNR, VGBEL, VGPOS, MATNR, FKIMG, NETWR |
+| VBFA | Document flow | VBELV, POSNV, VBELN, POSNN, VBTYP\_N (J delivery, M invoice), ERDAT |
 
-Derived tables: `stock_daily`, `demand_daily`, `forecast_daily`, `policy_params`, `po_proposals`, `vendor_scorecard`, `exceptions_daily`, `brief_daily`.
+Derived tables: `stock_daily` (opening, receipt, issue, rejected and closing quantity per SKU-plant-day), `change_log` (dated field changes modelled on CDHDR/CDPOS: delivery blocks set and released, ABGRU rejections, ELIKZ completions, so a snapshot can see each flag as it stood that day), `sim_vendor_params` and `sim_customer_orders` (the simulation's hidden draws, for ASSUMPTIONS.md and the policy replay), the ingest tables (`m5_calendar`, `m5_customers`, `sku_selection`, `demand_daily`, `ingest_meta`), `forecast_daily`, `policy_params`, `po_proposals`, `vendor_scorecard`, `exceptions_daily`, `brief_daily`.
 
-**Simplifications, stated in the dictionary:** one company code, purchasing organization and sales organization; one storage location per plant; prices on items instead of pricing conditions; no MRP run, batches or invoice verification documents (invoices live only in EKBE).
+**Simplifications, stated in the dictionary:** one company code, purchasing organization and sales organization; one storage location per plant; prices on items instead of pricing conditions; no MRP run, batches or invoice verification documents (invoices live only in EKBE); no ATP check, so VBEP-BMENG = WMENG; MARC-DISMM is ND (no planning) under the legacy policy until the policy stage writes VB with MINBE and EISBE; header and item fields show their state on the last simulated day, and `change_log` holds their history.
 
 **Simulation algorithm** (seeded, in this order):
 
 1. **SKUs.** Take the top 500 M5 items by unit sales over the last 365 days across FOODS and HOUSEHOLD combined (no fixed split; the resulting category mix goes in ASSUMPTIONS.md). MATNR = item ID, MATKL = department. Cost = 65–80% of the M5 sell price, fixed per SKU. Case pack (MARC-BSTRF, MARM CS) is drawn by seed: FOODS from {12, 24, 48}, HOUSEHOLD from {6, 12, 24}; cases per pallet go in MARM PAL. Every SKU exists in both plants with the same vendor.
 2. **Calendar.** Shift all dates by a multiple of 7 days so the last M5 sales day becomes the day before the demo's "today". Weekdays stay aligned, so weekly seasonality survives. M5 ends on a Sunday (2016-06-19) and today − 1 is a Tuesday (2026-10-13), so the last 5 M5 days are dropped; the shift is +3,773 days. Each item-store series starts at its first sale (pre-launch zeros dropped).
 3. **Customers and plants.** The 10 M5 stores become customers C01–C10, named after their store ("Store CA-1" and so on). California stores buy from plant P001; Texas and Wisconsin stores buy from P002.
-4. **Vendors.** 25 vendors with fictional names built from seeded word lists (for example "Harbor Ridge Supply"; no real brands). Each department gets 2–4 vendors, and each SKU has one. Per vendor, draw planned lead time (5–21 days), actual lead-time spread (coefficient of variation 0.1–0.5), on-time probability, fill fraction and a minimum order value ($500–3,000, LFM1-MINBW). Three vendors degrade so both EXC-08 triggers fire: two slip gradually over the final 90 days, and one drops suddenly 30 days before today.
+4. **Vendors.** 25 vendors with fictional names built from seeded word lists (for example "Harbor Ridge Supply"; no real brands). Each department gets at least 2 vendors, and each SKU has one. FOODS and HOUSEHOLD have only 5 departments, so 2–4 per department would cap the total at 20; the extra vendors go to the departments with the most SKUs per vendor (with seed 42: FOODS\_1 2, FOODS\_2 4, FOODS\_3 11, HOUSEHOLD\_1 6, HOUSEHOLD\_2 2). Per vendor, draw planned lead time (5–21 days), actual lead-time spread (coefficient of variation 0.1–0.5), on-time probability (0.90–0.99), probability of a full first delivery (0.94–0.995), a minimum order value ($500–3,000, LFM1-MINBW), an invoice price drift (−3% to +3%) and a weekly review weekday (Mon–Fri). Three vendors degrade so both EXC-08 triggers fire: two slip gradually over the final 90 days, and one drops suddenly 30 days before today.
 5. **Sales orders** (last 365 days only). Each customer orders on two fixed weekdays. Line quantity = that store's M5 units for the SKU since its previous order. Requested date (VBEP-EDATU) = order date + 2 days.
-6. **Deliveries.** Each day, each plant allocates stock to due lines, oldest first, and posts LIKP/LIPS plus MATDOC 601. Short lines stay open 3 days, then get a rejection reason (ABGRU). 2% of orders carry a delivery block for 1–5 days.
-7. **Billing.** VBRK/VBRP one day after goods issue; 1% are delayed at random so EXC-07 can fire.
-8. **Purchasing, using a deliberately weak legacy policy.** Weekly review per vendor; order-up-to = 14-day average demand × (lead time + 7) × 1.2, with no variability buffer; quantity rounded to the case pack (MARC-BSTRF). Write EKKO/EKPO/EKET with EINDT = BEDAT + APLFZ. The new policy (TRD Inventory policy) is judged against this baseline.
-9. **Receipts and invoices.** Arrival = BEDAT + planned lead time × a lognormal multiplier. Quantity = scheduled × fill fraction; the rest arrives later or the line closes short (ELIKZ). Post MATDOC 101 and EKBE type 1. The invoice (EKBE type 2) is at PO price × (1 + a small drift).
+6. **Deliveries.** Each day, each plant allocates stock to due lines, oldest first, and posts LIKP/LIPS plus MATDOC 601. Short lines stay open 3 days, then get a rejection reason (ABGRU). 8% of orders carry a delivery block for 1–5 days (raised from 2% so EXC-06 reaches 3 firings a week).
+7. **Billing.** VBRK/VBRP one day after goods issue, one billing document per delivery; 6% are delayed by 3–6 more days so EXC-07 reaches 3 firings a week (raised from 1%).
+8. **Purchasing, using a deliberately weak legacy policy.** Weekly review per vendor; order-up-to = 14-day average demand × (lead time + 7) × 1.2, with no variability buffer; inventory position = on hand + open PO quantity; quantity rounded up to whole cases (MARC-BSTRF), then topped up a case at a time until the PO reaches the vendor minimum (LFM1-MINBW). One PO per vendor and plant per review. Write EKKO/EKPO/EKET with EINDT = BEDAT + APLFZ. The new policy (TRD Inventory policy) is judged against this baseline.
+9. **Receipts and invoices.** Each PO arrives on one truck at BEDAT + planned lead time × a lognormal multiplier, floored at 75% of planned. The multiplier's spread comes from the vendor's CV and its median is set so P(arrival ≤ EINDT + 1) equals the vendor's on-time probability. Each line arrives in full with the vendor's full-delivery probability; otherwise 50–95% of its cases arrive, and the rest either follows 3–10 days later or the line closes short (ELIKZ), 50/50. Post MATDOC 101 and EKBE type 1. The invoice (EKBE type 2, one document 51… per goods receipt, 1–5 days later) is at PO price × (1 + vendor drift + noise with a 0.5% standard deviation). Draws are keyed by vendor, plant and PO date, so the policy replay sees the same vendor behaviour (common random numbers).
 10. **Stock.** Start at 30 days of average demand. Each day, add receipts and subtract issues; stock never goes negative (the shortfall is unfilled demand). Write `stock_daily`.
 
 **Exception coverage.** Every rule should fire at least 3 times per week. Reach that by tuning simulation rates first. Plant specific cases only for rules that still don't fire, and log each planted case in ASSUMPTIONS.md. Cap critical rows at about 40 per day so the list stays realistic.
 
-Full documents cover the last 365 days only; earlier M5 history feeds forecasting as `demand_daily`. Expect about 350,000 sales order lines and 50,000 PO lines, which DuckDB handles in seconds.
+Full documents cover the last 365 days only; earlier M5 history feeds forecasting as `demand_daily`. Seed 42 gives about 462,000 sales order lines, 41,000 PO lines and 498,000 material document lines; the simulation takes about 1 minute.
 
 ## Pipeline, SQL models and snapshots
 
@@ -126,7 +126,7 @@ Nine stages run in order through tasks.py, a small Python runner that behaves th
 | # | Stage | Command | Writes | Time budget |
 | --- | --- | --- | --- | --- |
 | 1 | Ingest M5 (download cached between runs) | `python tasks.py ingest` (or `data`) | `m5_calendar`, `m5_customers`, `sku_selection`, `demand_daily`, `ingest_meta` | 2 min |
-| 2 | Simulate SAP layer | `python tasks.py simulate` (or `data`) | All SAP tables, `stock_daily` | 3 min |
+| 2 | Simulate SAP layer, then run the integrity checks | `python tasks.py simulate` (or `data`) | All SAP tables, `stock_daily`, `change_log` | 3 min |
 | 3 | SQL models | `python tasks.py models` | Intermediate and mart views | 30 s |
 | 4 | Forecast and backtest | `python tasks.py forecast` | `forecast_daily`, eval/backtest.json | 5 min |
 | 5 | Policy and proposals | `python tasks.py policy` | `policy_params`, `po_proposals` | 2 min |
@@ -217,7 +217,7 @@ metric, value, threshold, days_to_impact, value_at_risk, action, evidence
 - `evidence` is JSON listing the source rows, for example `[{"table":"EKET","keys":{"EBELN":"4500012345","EBELP":"00010","ETENR":"0001"}}]`. The drill-down drawer reads it.
 - Rank order: severity, then ABC class, then days to impact (soonest first), then value at risk (largest first). EXC-08 rows have no SKU: rank them as A-class, with value at risk = the vendor's open PO value.
 - `action` is a template with numbers filled in, such as "Expedite PO 4500012345/10 (120 EA due 2026-10-18) or order 240 EA now." The LLM never writes this field.
-- Use SAP-style number ranges so documents look familiar: POs 45…, material documents 49…, deliveries 80…, billing 90….
+- Use SAP-style number ranges so documents look familiar: POs 45…, material documents 49…, invoices 51…, info records 53…, sales orders 0010…, deliveries 80…, billing 90…. Item numbers are zero-padded as in SAP (EBELP 00010, POSNR 000010, ETENR 0001).
 
 **SAP functional pack** (`sap-pack/`):
 
@@ -302,7 +302,7 @@ Filters, frozen header and data validation (cases 0 or more) are on. Derived col
 
 ## CI/CD and deploy
 
-One workflow builds, tests, gates and deploys on every push to main, with a small Windows job that keeps your setup working; a second runs a weekly smoke test against the live site. The committed workflow grows with the pipeline: today it runs `tasks.py ingest` (full config on Ubuntu, small on Windows) and `pytest`; the Pages build and deploy jobs are added with the Overview page.
+One workflow builds, tests, gates and deploys on every push to main, with a small Windows job that keeps your setup working; a second runs a weekly smoke test against the live site. The committed workflow grows with the pipeline: today it runs `tasks.py data` (ingest, simulate and the integrity checks; full config on Ubuntu, small on Windows) and `pytest`; the Pages build and deploy jobs are added with the Overview page.
 
 ```yaml
 # .github/workflows/build.yml (sketch; pin the current major version of each action)

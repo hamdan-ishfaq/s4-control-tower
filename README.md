@@ -15,8 +15,8 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.lock
 
-python tasks.py ingest            # download M5 (cached in data\), pick SKUs, write demand_daily
-python tasks.py ingest --config pipeline\config.small.yaml   # 50-SKU quick run
+python tasks.py data              # download M5 (cached in data\), pick SKUs, simulate the SAP tables
+python tasks.py data --config pipeline\config.small.yaml     # 50-SKU quick run
 pytest -q
 ```
 
