@@ -38,7 +38,7 @@ Recurring cost is $0. The only optional spend is a one-off $10 OpenRouter credit
 | Video | OBS Studio or Loom free | Demo recording | $0 |
 | Uptime check | GitHub Actions weekly link check | No paid monitor | $0 |
 
-**Dev environment:** native Windows 11 with PowerShell, Python 3.12 and Node 22 LTS; no Docker and no WSL. CI builds on Ubuntu and also runs a small Windows job, so both stay in step.
+**Dev environment:** native Windows 11 with PowerShell, Python 3.12 and Node 24 LTS; no Docker and no WSL. Python 3.12 is pinned (not 3.14) because numba, behind statsforecast, and LightGBM are safest there; a `.python-version` file containing `3.12` makes uv pick it too. CI builds on Ubuntu and also runs a small Windows job, so both stay in step.
 
 ## Repository layout
 
@@ -331,7 +331,7 @@ jobs:
         env: { OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_API_KEY }}", LLM_MODE: cache-first }
       - run: pytest -q && python -m pipeline.gates
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 24 }
       - run: python tasks.py site
       - uses: actions/upload-pages-artifact@v3
         with: { path: web/dist }
@@ -382,7 +382,7 @@ Everything runs locally with Python and Node; nothing needs a cloud account exce
 ```powershell
 # one-time setup, from the repo folder (for example C:\dev\s4-control-tower)
 setx PYTHONUTF8 1                       # then reopen PowerShell
-py -3.12 -m venv .venv
+py -3.12 -m venv .venv                  # .python-version pins 3.12 for uv as well
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # once, only if activation is blocked
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.lock
@@ -443,5 +443,6 @@ llm: {model: "<pinned OpenRouter model id>", mode: cache-first, max_output_token
 - The site is static and holds no secrets; the only key lives in CI secrets (and in the S-01 function, if built).
 - No personal data: customers and vendors are synthetic names.
 - Never commit `.env`; add a pre-commit secret scan.
+- `.gitignore` anchors build data to the repo root (`/data/`, `/web/public/data/`, `/exports/`) so folders named `data` deeper in the tree are not ignored by accident. `pipeline/brief/cache/` is committed.
 - Keep your existing convention: commits authored as Muhammad Hamdan Ishfaq (`163332483+hamdan-ishfaq@users.noreply.github.com`, set in the repo's local git config), with no AI co-author trailers.
 - Commit locally after each working, tested piece; push only on request. Repo: https://github.com/hamdan-ishfaq/s4-control-tower (Vite `base` = `/s4-control-tower/`).

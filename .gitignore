@@ -10,14 +10,16 @@ __pycache__/
 
 # node / web build
 node_modules/
-web/dist/
-web/public/data/
+/web/dist/
+/web/public/data/
 
-# data and build outputs (M5 is downloaded in CI, never re-hosted)
-data/
+# data and build outputs (M5 is downloaded in CI, never re-hosted).
+# Anchored to the repo root: an unanchored data/ would also ignore any
+# folder named data deeper in the tree. pipeline/brief/cache/ is committed.
+/data/
 *.duckdb
 *.duckdb.wal
-exports/
+/exports/
 
 # editors and OS
 .vscode/
