@@ -24,7 +24,9 @@ jobs:
       - uses: actions/setup-python@v6
         with: { python-version-file: .python-version, cache: pip, cache-dependency-path: requirements.lock }
       - uses: actions/cache@v4
-        with: { path: data/m5, key: m5-${{ runner.os }}-v1 }
+        with:
+          path: data/m5
+          key: m5-${{ runner.os }}-v1
       - run: pip install -r requirements.lock
       - run: python tasks.py ingest --config ${{ matrix.config }}
       - run: pytest -q
